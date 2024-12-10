@@ -9,3 +9,6 @@ This project is a real-time exercise tracking system that uses EMG (electromyogr
 - **Adaptive Thresholds for Different Exercises**: Uses customizable thresholds for different exercises, ensuring the system adapts to various workout intensities and types.
 - **Fist Detection**: Optional feature for detecting hand movements to enhance workout accuracy feedback for certain exercises.
 - **Exercise Performance Analytics**: Captures and logs data over time, enabling users to track their improvement and form consistency.
+
+## Libraries
+- **https://github.com/PaulStoffregen/TimerOne - for GetSignal.cpp
