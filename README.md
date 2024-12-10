@@ -11,4 +11,4 @@ This project is a real-time exercise tracking system that uses EMG (electromyogr
 - **Exercise Performance Analytics**: Captures and logs data over time, enabling users to track their improvement and form consistency.
 
 ## Libraries
-- **https://github.com/PaulStoffregen/TimerOne - for GetSignal.cpp
+- https://github.com/PaulStoffregen/TimerOne - for GetSignal.cpp
