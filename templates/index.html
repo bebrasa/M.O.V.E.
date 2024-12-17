@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time EMG Visualization</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>EMG Visualization</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
@@ -17,9 +16,9 @@
 
         // Инициализация графика
         const layout = {
-            title: 'Real-Time EMG Data',
-            xaxis: { title: 'Time (s)' },
-            yaxis: { title: 'Signal Amplitude', range: [0, 255] }
+            title: 'График сигнала EMG',
+            xaxis: { title: 'Время (сек)' },
+            yaxis: { title: 'Амплитуда', range: [0, 255] }
         };
 
         Plotly.newPlot('emg-plot', [{
@@ -36,8 +35,6 @@
 
         // Обновление графика
         socket.on('update_plot', (data) => {
-            console.log("Данные получены:", data);
-
             if (data.x && data.y) {
                 Plotly.update('emg-plot', {
                     x: [data.x],
