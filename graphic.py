@@ -2,7 +2,7 @@ import random
 import serial
 
 # Переключатель между эмуляцией и реальностью
-USE_ARDUINO = True  
+USE_ARDUINO = False  
 
 # Глобальная переменная
 filtrdVal = 0

@@ -14,3 +14,16 @@ h1 {
 #emg-plot {
     margin-top: 20px;
 }
+
+.lamp {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: grey; /* Выключенная лампочка */
+    margin: 20px auto;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+.active {
+    background-color: green; /* Включённая лампочка */
+    box-shadow: 0 0 20px green;
+}

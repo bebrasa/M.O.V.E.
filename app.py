@@ -9,13 +9,15 @@ app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 
 # Настройка последовательного порта
-port = '/dev/cu.usbmodem1101'  # Замените на реальный порт
+port = '/dev/tty0'  # Замените на реальный порт
 baud_rate = 115200
 ser = serial.Serial(port, baud_rate, timeout=1)
 
 # Данные для графика
 x_data = []
 y_data = []
+active_start_time = None  # Время, когда мышца стала активной
+lamp_status = False       # Состояние "лампочки"
 
 @app.route('/')
 def index():
@@ -23,7 +25,7 @@ def index():
 
 @socketio.on('start_stream')
 def stream_data():
-    global x_data, y_data
+    global x_data, y_data, active_start_time, lamp_status
 
     start_time = time.time()
 
@@ -50,9 +52,20 @@ def stream_data():
                 y_data.pop(0)
                 x_data.pop(0)
 
+            # Проверка активации мышцы
+            if value > 100:  # Условие активации мышцы
+                if active_start_time is None:
+                    active_start_time = time.time()  # Запоминаем начало активации
+                elif time.time() - active_start_time >= 2:  # Если прошло 2 секунды
+                    lamp_status = True
+            else:
+                active_start_time = None  # Сбрасываем время, если мышца не активна
+                lamp_status = False
+
             # Отправка данных клиенту
-            socketio.emit('update_plot', {'x': x_data, 'y': y_data})
+            socketio.emit('update_plot', {'x': x_data, 'y': y_data, 'lamp_status': lamp_status})
         eventlet.sleep(0.01)
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True)
+    socketio.run(app, host='127.0.0.1', port=5001, debug=True)
+
