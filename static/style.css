@@ -1,4 +1,4 @@
-/* Стили веб-страницы */
+\/* Стили веб-страницы */
 body {
     font-family: Arial, sans-serif;
     background-color: #f4f4f9;
@@ -23,6 +23,7 @@ h1 {
     margin: 20px auto;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
+
 .active {
     background-color: green; /* Включённая лампочка */
     box-shadow: 0 0 20px green;
