@@ -9,7 +9,7 @@ app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 
 # Настройка последовательного порта
-port = '/dev/ttyACM1'  # Замените на реальный порт
+port = '/dev/ttyACM3'  # Замените на реальный порт
 baud_rate = 115200
 ser = serial.Serial(port, baud_rate, timeout=1)
 
@@ -51,10 +51,10 @@ def stream_data():
                 history = [(t, v) for t, v in history if current_time - t <= 1]
 
                 # Подсчет значений, превышающих порог
-                exceeding_values = [v for t, v in history if v > 150 or v < -150]
+                exceeding_values = [v for t, v in history if v > 65 or v < -65]
 
                 # Логика активации лампочки
-                if len(exceeding_values) >= 4 and len(exceeding_values) <= 30:
+                if len(exceeding_values) >= 4 :
                     lamp_status = True
                 else:
                     lamp_status = False
@@ -79,7 +79,7 @@ def stream_data():
                 print(f"Ошибка преобразования: '{line_data}'")
                 continue
 
-        eventlet.sleep(0.01)
+        eventlet.sleep(0.005)
 
 if __name__ == '__main__':
-    socketio.run(app, host='127.0.0.1', port=5001, debug=True)
+    socketio.run(app, host='127.0.0.1', port=5000, debug=True)
