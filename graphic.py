@@ -2,13 +2,13 @@ import random
 import serial
 
 # Переключатель между эмуляцией и реальностью
-USE_ARDUINO = True  
+USE_ARDUINO = False  
 
 # Глобальная переменная
 filtrdVal = 0
 
 if USE_ARDUINO:
-    port = '/dev/cu.usbmodem101'  # Обновите на реальный порт
+    port = '/dev/ttyACM0'  # Обновите на реальный порт
     baud_rate = 115200
     ser = serial.Serial(port, baud_rate, timeout=1)
 
@@ -21,8 +21,7 @@ def get_data():
             try:
                 line_data = ser.readline().decode('utf-8').strip()
                 value = int(line_data)
-                if value > 100:
-                    filtrdVal = value
+                filtrdVal = value
                 print(f"Получены данные с Arduino: {filtrdVal}")
                 return filtrdVal
             except ValueError:

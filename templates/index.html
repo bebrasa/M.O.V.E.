@@ -6,9 +6,15 @@
     <title>EMG Visualization</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
     <h1>Real-Time EMG Visualization</h1>
+
+    <!-- Лампочка -->
+    <div class="lamp" id="lamp"></div>
+
+    <!-- График -->
     <div id="emg-plot"></div>
 
     <script>
@@ -18,7 +24,7 @@
         const layout = {
             title: 'График сигнала EMG',
             xaxis: { title: 'Время (сек)' },
-            yaxis: { title: 'Амплитуда', range: [0, 255] }
+            yaxis: { title: 'Амплитуда', range: [-300, 300] }
         };
 
         Plotly.newPlot('emg-plot', [{
@@ -29,18 +35,30 @@
             line: { color: 'blue', width: 2 }
         }], layout);
 
+        // Ссылка на лампочку
+        const lamp = document.getElementById('lamp');
+
         // Запуск стриминга
         socket.emit('start_stream');
         console.log("Стриминг запущен");
 
-        // Обновление графика
+        // Обновление графика и лампочки
         socket.on('update_plot', (data) => {
             if (data.x && data.y) {
+                // Обновление графика
                 Plotly.update('emg-plot', {
                     x: [data.x],
                     y: [data.y]
                 });
-                console.log("График обновлен.");
+
+                // Обновление состояния лампочки
+                if (data.lamp_status) {
+                    lamp.classList.add('active'); // Лампочка загорается
+                } else {
+                    lamp.classList.remove('active'); // Лампочка выключается
+                }
+
+                console.log("График и лампочка обновлены.");
             } else {
                 console.error("Пустые данные.");
             }
