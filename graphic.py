@@ -8,7 +8,7 @@ USE_ARDUINO = False
 filtrdVal = 0
 
 if USE_ARDUINO:
-    port = '/dev/ttyACM0'  # Обновите на реальный порт
+    port = '/dev/cu.usbmodem1101'  # Обновите на реальный порт
     baud_rate = 115200
     ser = serial.Serial(port, baud_rate, timeout=1)
 
