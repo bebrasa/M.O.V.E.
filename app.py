@@ -1,85 +1,124 @@
 from flask import Flask, render_template
 from flask_socketio import SocketIO
-import serial
-import eventlet
+import asyncio
+from bleak import BleakClient
+import numpy as np
 import time
+import threading
+from scipy.signal import butter, lfilter
 
-# Настройка Flask
-app = Flask(__name__)
-socketio = SocketIO(app, async_mode='eventlet')
+app = Flask(__name__, static_folder='static')
+socketio = SocketIO(app, async_mode='threading')
 
-# Настройка последовательного порта
-port = '/dev/cu.usbmodem1101'  # Замените на реальный порт
-baud_rate = 115200
-ser = serial.Serial(port, baud_rate, timeout=1)
+ESP32_MAC = "F0:F5:BD:FD:92:6E"
+CHARACTERISTIC_UUID = "abcdef01-1234-5678-1234-56789abcdef0"
 
-# Функция для сглаживания данных
-def smooth_data(data, window_size=5):
-    if len(data) < window_size:
-        return data[-1]  # Если данных меньше окна сглаживания, вернуть последний элемент
-    return sum(data[-window_size:]) / window_size  # Скользящее среднее
+value_buffer = []
+fft_buffer = []
+buffer_lock = threading.Lock()
+fft_lock = threading.Lock()
 
-# Данные для графика
-x_data = []
-y_data = []
-history = []  # Храним список значений сигнала с временными метками
-lamp_status = False  # Состояние "лампочки"
+lamp_status = False
+history = []
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@socketio.on('start_stream')
-def stream_data():
-    global x_data, y_data, history, lamp_status
+def process_value(value):
+    global lamp_status, history
+    current_time = time.time()
+    history.append((current_time, value))
+    history = [(t, v) for t, v in history if current_time - t <= 1]
+    lamp_status = len([v for t, v in history if abs(v) > 43]) >= 4
 
-    start_time = time.time()
+def handle_notification(sender, data):
+    try:
+        line = data.decode('utf-8').strip()
+        value = int(line)
+        value = max(-300, min(300, value))
+        process_value(value)
 
+        with buffer_lock:
+            value_buffer.append((time.time(), value))
+        with fft_lock:
+            fft_buffer.append(value)
+            if len(fft_buffer) > 256:
+                fft_buffer.pop(0)
+
+    except Exception as e:
+        print(f"[BLE] Ошибка: {e}")
+
+def emit_loop(start_time):
+    last_emit = 0
     while True:
-        if ser.in_waiting > 0:
-            try:
-                # Чтение значения из последовательного порта
-                line_data = ser.readline().decode('utf-8').strip()
-                value = int(line_data)
-                value = max(-300, min(300, value))  # Ограничение диапазона
+        time.sleep(0.05)
 
-                # Добавляем значение в историю
-                current_time = time.time()
-                history.append((current_time, value))
-
-                # Удаляем значения старше 2 секунд
-                history = [(t, v) for t, v in history if current_time - t <= 1]
-
-                # Подсчет значений, превышающих порог
-                exceeding_values = [v for t, v in history if v > 43 or v < -43]
-
-                # Логика активации лампочки
-                if len(exceeding_values) >= 4 :
-                    lamp_status = True
-                else:
-                    lamp_status = False
-
-                # Логирование для отладки
-                print(f"История: {history}")
-                print(f"Значения превышающие порог: {exceeding_values}, Лампочка: {lamp_status}")
-
-                # Добавление данных для графика
-                y_data.append(value)
-                x_data.append(current_time - start_time)
-
-                # Ограничение количества точек на графике
-                if len(y_data) > 100:
-                    y_data.pop(0)
-                    x_data.pop(0)
-
-                # Отправка данных клиенту
-                socketio.emit('update_plot', {'x': x_data, 'y': y_data, 'lamp_status': lamp_status})
-
-            except ValueError:
-                print(f"Ошибка преобразования: '{line_data}'")
+        with buffer_lock:
+            if not value_buffer:
                 continue
+            timestamp, value = value_buffer[-1]
+            value_buffer.clear()
 
-        eventlet.sleep(0)
+        if time.time() - last_emit >= 0.05:
+            last_emit = time.time()
+            socketio.emit('update_plot', {
+                'x': [timestamp - start_time],
+                'y': [value],
+                'lamp_status': lamp_status
+            })
+
+# Полосовой фильтр Баттерворта
+def butter_bandpass(lowcut, highcut, fs, order=4):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    return butter(order, [low, high], btype='band')
+
+def apply_bandpass_filter(data, lowcut=1, highcut=100, fs=1000):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=4)
+    return lfilter(b, a, data)
+
+def fft_loop():
+    while True:
+        time.sleep(0.5)
+        with fft_lock:
+            if len(fft_buffer) < 64:
+                continue
+            data = np.array(fft_buffer[-256:])
+            # Применяем фильтрацию
+            data = apply_bandpass_filter(data, lowcut=5, highcut=100, fs=1000)
+            
+            fft_result = np.fft.fft(data)
+            freqs = np.fft.fftfreq(len(data), d=1/100)  # Частота дискретизации ~100 Гц
+            magnitudes = np.abs(fft_result[:len(data)//2])
+            freqs = freqs[:len(data)//2]
+
+            # Расширяем ось частоты до 120 Гц
+            extended_freqs = np.linspace(0, 120, len(magnitudes))
+        
+        socketio.emit('update_fft', {
+            'freq': extended_freqs.tolist(),
+            'amp': magnitudes.tolist()
+        })
+
+
+@socketio.on('start_stream')
+def start_stream():
+    threading.Thread(target=background_ble_loop, daemon=True).start()
+
+def background_ble_loop():
+    asyncio.run(run_ble_client())
+
+async def run_ble_client():
+    start_time = time.time()
+    async with BleakClient(ESP32_MAC) as client:
+        print("[BLE] Подключено")
+        await client.start_notify(CHARACTERISTIC_UUID, handle_notification)
+        threading.Thread(target=emit_loop, args=(start_time,), daemon=True).start()
+        threading.Thread(target=fft_loop, daemon=True).start()
+        while True:
+            await asyncio.sleep(1)
 
 if __name__ == '__main__':
 

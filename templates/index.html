@@ -1,68 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EMG Visualization</title>
-    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <link rel="stylesheet" href="static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EMG Visualization</title>
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-    <h1>Real-Time EMG Visualization</h1>
+  <h1>Real-Time EMG Visualization</h1>
+  <div class="lamp" id="lamp"></div>
+  <div id="emg-plot"></div>
+  <h2>FFT Spectrum</h2>
+  <div id="fft-plot"></div>
 
-    <!-- Лампочка -->
-    <div class="lamp" id="lamp"></div>
+  <script>
+    const socket = io();
+    const maxPoints = 200;
 
-    <!-- График -->
-    <div id="emg-plot"></div>
+    Plotly.newPlot('emg-plot', [{
+      x: [],
+      y: [],
+      mode: 'lines',
+      line: { color: 'blue' },
+      name: 'EMG Signal'
+    }], {
+      title: 'Сигнал EMG',
+      xaxis: { title: 'Время (с)' },
+      yaxis: { title: 'Амплитуда', range: [-300, 300] }
+    });
 
-    <script>
-        const socket = io();
+    Plotly.newPlot('fft-plot', [{
+    x: [],
+    y: [],
+    mode: 'lines',
+    line: { color: 'green' },
+    name: 'FFT Spectrum'
+  }], {
+    title: 'Спектр сигнала',
+    xaxis: { title: 'Частота (Гц)', range: [0, 120] },  <!-- Обновление диапазона оси частоты -->
+    yaxis: { title: 'Амплитуда' }
+  });
 
-        // Инициализация графика
-        const layout = {
-            title: 'График сигнала EMG',
-            xaxis: { title: 'Время (сек)' },
-            yaxis: { title: 'Амплитуда', range: [-300, 300] }
-        };
+    const lamp = document.getElementById('lamp');
+    socket.emit('start_stream');
 
-        Plotly.newPlot('emg-plot', [{
-            x: [],
-            y: [],
-            mode: 'lines',
-            name: 'EMG Signal',
-            line: { color: 'blue', width: 2 }
-        }], layout);
+    socket.on('update_plot', (data) => {
+      const x = data.x[0];
+      const y = data.y[0];
+      Plotly.extendTraces('emg-plot', {
+        x: [[x]],
+        y: [[y]]
+      }, [0], maxPoints);
+      lamp.classList.toggle('active', data.lamp_status);
+    });
 
-        // Ссылка на лампочку
-        const lamp = document.getElementById('lamp');
-
-        // Запуск стриминга
-        socket.emit('start_stream');
-        console.log("Стриминг запущен");
-
-        // Обновление графика и лампочки
-        socket.on('update_plot', (data) => {
-            if (data.x && data.y) {
-                // Обновление графика
-                Plotly.update('emg-plot', {
-                    x: [data.x],
-                    y: [data.y]
-                });
-
-                // Обновление состояния лампочки
-                if (data.lamp_status) {
-                    lamp.classList.add('active'); // Лампочка загорается
-                } else {
-                    lamp.classList.remove('active'); // Лампочка выключается
-                }
-
-                console.log("График и лампочка обновлены.");
-            } else {
-                console.error("Пустые данные.");
-            }
-        });
-    </script>
+    socket.on('update_fft', (data) => {
+      Plotly.update('fft-plot', {
+        x: [data.freq],
+        y: [data.amp]
+      }, {}, [0]);
+    });
+  </script>
 </body>
 </html>

@@ -1,23 +1,20 @@
-\/* Стили веб-страницы */
 body {
     font-family: Arial, sans-serif;
-    background-color: #f4f4f9;
-    color: #333;
     text-align: center;
+    background-color: #f0f0f0;
+    margin: 0;
     padding: 20px;
-}
-
-h1 {
-    margin-bottom: 30px;
-}
-
-#emg-plot {
-    margin-top: 20px;
-}
-
-.lamp {
-    width: 50px;
-    height: 50px;
+  }
+  
+  h1, h2 {
+    color: #333;
+    margin-bottom: 20px;
+  }
+  
+  .lamp {
+    width: 40px;
+    height: 40px;
+    margin: 10px auto;
     border-radius: 50%;
     background-color: grey; /* Выключенная лампочка */
     margin: 20px auto;
@@ -25,6 +22,6 @@ h1 {
 }
 
 .active {
-    background-color: green; /* Включённая лампочка */
-    box-shadow: 0 0 20px green;
+    background-color: red; /* Включённая лампочка */
+    box-shadow: 0 0 20px red;
 }
