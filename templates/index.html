@@ -1,83 +1,138 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>EMG Visualization</title>
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .lamp {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background-color: #ccc;
+      margin: 20px auto;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+      transition: background-color 0.3s;
+    }
+    .lamp.active {
+      background-color: #ff5555;
+      box-shadow: 0 0 20px #ff0000;
+    }
+    .plot-container {
+      margin-top: 20px;
+    }
+    #power-indicator {
+      width: 100%;
+      height: 30px;
+      border: 1px solid #ddd;
+      background-color: #f9f9f9;
+      position: relative;
+      margin: 15px 0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #power-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(to right, #4CAF50, #FFC107, #F44336);
+      transition: width 0.3s;
+    }
+    #power-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
 </head>
 <body>
-  <h1>Real-Time EMG Visualization</h1>
+  <h1>Real‐Time EMG Visualization</h1>
+
+  <!-- Lamp indicator -->
   <div class="lamp" id="lamp"></div>
 
-  <!-- 🔋 Индикатор мощности -->
-  <h2>Мощность сигнала</h2>
-  <div id="power-indicator" style="width: 300px; height: 25px; border: 1px solid #000; background-color: #eee; position: relative; margin-bottom: 10px;">
-    <div id="power-bar" style="height: 100%; width: 0%; background-color: green;"></div>
-    <span id="power-text" style="position: absolute; top: 0; left: 10px; line-height: 25px; font-weight: bold;"></span>
+  <!-- Power bar -->
+  <h2>Signal Power</h2>
+  <div id="power-indicator">
+    <div id="power-bar"></div>
+    <span id="power-text">0%</span>
   </div>
 
-  <div id="emg-plot"></div>
-  <h2>FFT Spectrum</h2>
-  <div id="fft-plot"></div>
+  <!-- EMG signal plot -->
+  <div class="plot-container">
+    <div id="emg-plot"></div>
+  </div>
+
+  <!-- FFT spectrum plot -->
+  <div class="plot-container">
+    <h2>FFT Spectrum</h2>
+    <div id="fft-plot"></div>
+  </div>
 
   <script>
     const socket = io();
     const maxPoints = 1000;
 
+    // Initialize EMG signal plot
     Plotly.newPlot('emg-plot', [{
-      x: [],
-      y: [],
-      mode: 'lines',
-      line: { color: 'blue' },
-      name: 'EMG Signal'
+      x: [], y: [], mode: 'lines', line: { }, name: 'EMG Signal'
     }], {
-      title: 'Сигнал EMG',
-      xaxis: { title: 'Время (с)' },
-      yaxis: { title: 'Амплитуда', range: [-300, 300] }
+      title: 'EMG Signal',
+      xaxis: { title: 'Time (s)' },
+      yaxis: { title: 'Amplitude', range: [0, 4096] },
+      margin: { t: 40 }
     });
 
+    // Initialize FFT spectrum plot
     Plotly.newPlot('fft-plot', [{
-      x: [],
-      y: [],
-      mode: 'lines',
-      line: { color: 'green' },
-      name: 'FFT Spectrum'
+      x: [], y: [], mode: 'lines', line: { }, name: 'FFT Spectrum'
     }], {
-      title: 'Спектр сигнала',
-      xaxis: { title: 'Частота (Гц)', range: [0, 100] },
-      yaxis: { title: 'Амплитуда' }
+      title: 'Frequency Spectrum',
+      xaxis: { title: 'Frequency (Hz)', range: [0, 100] },
+      yaxis: { title: 'Amplitude' },
+      margin: { t: 40 }
     });
 
     const lamp = document.getElementById('lamp');
     const powerBar = document.getElementById('power-bar');
     const powerText = document.getElementById('power-text');
 
-    socket.emit('start_stream');
+    socket.on('connect', () => {
+      socket.emit('start_stream');
+    });
 
-    socket.on('update_plot', (data) => {
-      const x = data.x[0];
-      const y = data.y[0];
-      Plotly.extendTraces('emg-plot', {
-        x: [[x]],
-        y: [[y]]
-      }, [0], maxPoints);
+    // Update EMG trace and lamp status
+    socket.on('update_plot', data => {
+      Plotly.extendTraces(
+        'emg-plot',
+        { x: [data.x], y: [data.y] },
+        [0],
+        maxPoints
+      );
       lamp.classList.toggle('active', data.lamp_status);
     });
 
-    socket.on('update_fft', (data) => {
-      Plotly.update('fft-plot', {
-        x: [data.freq],
-        y: [data.amp]
-      }, {}, [0]);
-
-      // 🔋 Обновление индикатора по percent_power от сервера
-      const percent = data.percent_power ?? 0;
-      powerBar.style.width = percent + "%";
-      powerBar.style.backgroundColor = percent > 70 ? "red" : (percent > 40 ? "orange" : "green");
-      powerText.textContent = percent + " %";
+    // Update FFT spectrum and power bar
+    socket.on('update_fft', data => {
+      Plotly.update(
+        'fft-plot',
+        { x: [data.freq], y: [data.amp] },
+        {},
+        [0]
+      );
+      const pct = data.percent_power ?? 0;
+      powerBar.style.width = pct + '%';
+      powerText.textContent = pct + '%';
     });
   </script>
 </body>

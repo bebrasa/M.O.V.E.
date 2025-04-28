@@ -4,13 +4,13 @@
 
 #define SERVICE_UUID "12345678-1234-5678-1234-56789abcdef0"
 #define CHARACTERISTIC_UUID "abcdef01-1234-5678-1234-56789abcdef0"
-#define ANALOG_PIN 4  // GPIO4 для аналогового входа
+#define ANALOG_PIN 4 // GPIO4 для аналогового входа
 
 BLEServer *pServer = NULL;
 BLECharacteristic *pCharacteristic = NULL;
 
 void setup() {
-    Serial.begin(115200);
+    // Serial.begin(115200);
     BLEDevice::init("ESP32-C3-BLE");  // Имя устройства
     pServer = BLEDevice::createServer();
 
@@ -30,16 +30,17 @@ void setup() {
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->start();
+
+    analogReadResolution(12);
 }
 
 void loop() {
     int val = analogRead(ANALOG_PIN); // Читаем аналоговый вход
-    int mappedVal = map(val, 0, 4095, -255, 255); // Преобразуем диапазон
-    String value = String(mappedVal);
+    String value = String(val);
     
-    Serial.println(value);  // Вывод в Serial Monitor
+    // Serial.println(value);  // Вывод в Serial Monitor
     pCharacteristic->setValue(value.c_str()); // Обновляем BLE-значение
     pCharacteristic->notify(); // Уведомляем клиентов
 
-    delay(100); // Ждем 100 мс перед следующим измерением
+    delay(5); // Ждем 100 мс перед следующим измерением
 }
