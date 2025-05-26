@@ -1,14 +1,43 @@
+# EMG 
+A platform connected to an EMG device (via BLE) for real-time muscle signal visualization and calibration.  
+Allows managing a database of users and their muscles, storing calibration values.
 
-# Exercise Technique Tracking System with EMG Sensors
-
-This project is a real-time exercise tracking system that uses EMG (electromyography) sensors to monitor muscle activation and technique precision during workouts. The system focuses on tracking muscle engagement to ensure that the correct muscles are activated during each exercise, assisting users in refining their form for safe and effective training.
+---
 
 ## Features
-- **EMG-Based Muscle Activation Tracking**: Monitors and analyzes electrical signals in targeted muscles to detect activation levels and engagement.
-- **Real-Time Feedback**: Provides immediate feedback to users, helping them adjust their form and avoid improper muscle engagement.
-- **Adaptive Thresholds for Different Exercises**: Uses customizable thresholds for different exercises, ensuring the system adapts to various workout intensities and types.
-- **Fist Detection**: Optional feature for detecting hand movements to enhance workout accuracy feedback for certain exercises.
-- **Exercise Performance Analytics**: Captures and logs data over time, enabling users to track their improvement and form consistency.
 
-## Libraries
-- https://github.com/PaulStoffregen/TimerOne - for GetSignal.cpp
+- Connects to EMG sensor via BLE (ESP32)
+- Real-time visualization of EMG signal (waveform and FFT spectrum)
+- Calibration of minimum and maximum signal power levels
+- Management of students and muscles database (create, select, store calibrations)
+- Web interface with interactive charts and user-friendly UI
+
+---
+
+## Technologies
+
+- Python 3.x
+- Flask + Flask-SocketIO
+- SQLAlchemy + SQLite
+- Bleak (BLE client)
+- NumPy, SciPy
+- Plotly.js
+- HTML/CSS/JavaScript
+
+---
+
+## Installation
+
+1. Clone the repository or copy the project files.
+
+## Install dependencies
+
+pip install -r requirements.txt
+
+## run 
+
+python app.py
+
+## Open your web browser and navigate to:
+
+http://localhost:5002

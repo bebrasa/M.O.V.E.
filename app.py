@@ -1,4 +1,5 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO
 import asyncio
 from bleak import BleakClient
@@ -7,46 +8,58 @@ import time
 import threading
 from scipy.signal import butter, lfilter, iirnotch
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///emg.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 socketio = SocketIO(app, async_mode='threading')
 
 # BLE config
 ESP32_MAC = "F0:F5:BD:FD:92:6E"
 CHARACTERISTIC_UUID = "abcdef01-1234-5678-1234-56789abcdef0"
 
-# Params
-LAMP_THRESHOLD = 43
-BANDPASS_MIN = 5
-BANDPASS_MAX = 99
-NOTCH_FREQ = 50
-NOTCH_Q = 30
-FS = 200  # Sampling freq
+FS = 200
 
-# Calibration state for power
-calib_min = None
-calib_max = None
+# Models
+class Student(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    muscles = db.relationship('Muscle', backref='student', lazy=True)
+
+class Muscle(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
+    calib_min = db.Column(db.Float, nullable=True)
+    calib_max = db.Column(db.Float, nullable=True)
+
+with app.app_context():
+    db.create_all()
+
+# Globals for selected entities and calibration
+selected_student_id = None
+selected_muscle_id = None
+
+LAMP_THRESHOLD = 43
+
+value_buffer = []
+fft_buffer = []
+buffer_lock = threading.Lock()
+fft_lock = threading.Lock()
+
+lamp_status = False
+history = []
+
+collecting_calib_min_power = False
+collecting_calib_max_power = False
 
 calib_min_power_values = []
 calib_max_power_values = []
 calib_min_lock = threading.Lock()
 calib_max_lock = threading.Lock()
 
-collecting_calib_min_power = False
-collecting_calib_max_power = False
-
-# Buffers
-value_buffer = []
-fft_buffer = []
-buffer_lock = threading.Lock()
-fft_lock = threading.Lock()
-
-# Lamp logic
-lamp_status = False
-history = []
-
-@app.route('/')
-def index():
-    return render_template('index.html')
+calib_min = None
+calib_max = None
 
 def process_value(value):
     global lamp_status, history
@@ -62,11 +75,11 @@ def butter_bandpass(lowcut, highcut, fs, order=4):
     return butter(order, [low, high], btype='band')
 
 def apply_bandpass_filter(data):
-    b, a = butter_bandpass(BANDPASS_MIN, BANDPASS_MAX, FS, order=4)
+    b, a = butter_bandpass(5, 99, FS, order=4)
     return lfilter(b, a, data)
 
 def apply_notch_filter(data):
-    b, a = iirnotch(NOTCH_FREQ, NOTCH_Q, FS)
+    b, a = iirnotch(50, 30, FS)
     return lfilter(b, a, data)
 
 def handle_notification(sender, data):
@@ -101,7 +114,7 @@ def emit_loop(start_time):
         print(f"[emit_loop error] {e}")
 
 def fft_loop():
-    global collecting_calib_min_power, collecting_calib_max_power
+    global collecting_calib_min_power, collecting_calib_max_power, calib_min, calib_max
     window_size = 256
     while True:
         time.sleep(0.1)
@@ -120,7 +133,6 @@ def fft_loop():
         power = magnitudes ** 2
         total_power = np.sum(power)
 
-        # Собираем мощность для калибровки если нужно
         if collecting_calib_min_power:
             with calib_min_lock:
                 calib_min_power_values.append(total_power)
@@ -128,10 +140,14 @@ def fft_loop():
             with calib_max_lock:
                 calib_max_power_values.append(total_power)
 
-        min_power_local = calib_min if calib_min is not None else 1909095491.6462147
-        max_power_local = calib_max if calib_max is not None else 25419549659.2756
+        min_power_local = calib_min
+        max_power_local = calib_max
 
-        normalized_power = (total_power - min_power_local) / (max_power_local - min_power_local)
+        if min_power_local is None or max_power_local is None:
+            min_power_local = 1909095491.6462147
+            max_power_local = 25419549659.2756
+
+        normalized_power = (total_power - min_power_local) / (max_power_local*1.3 - min_power_local)
         normalized_power = np.clip(normalized_power, 0, 1)
         percent_power = int(normalized_power * 100)
 
@@ -164,7 +180,7 @@ def start_calibration_max():
     threading.Timer(5.0, finish_calibration_max).start()
 
 def finish_calibration_min():
-    global collecting_calib_min_power, calib_min
+    global collecting_calib_min_power, calib_min, selected_muscle_id
     with calib_min_lock:
         collecting_calib_min_power = False
         if calib_min_power_values:
@@ -173,10 +189,18 @@ def finish_calibration_min():
         else:
             calib_min = None
     print(f"[CALIB] Минимум мощности: {calib_min}")
+
+    with app.app_context():
+        if selected_muscle_id and calib_min is not None:
+            muscle = Muscle.query.get(selected_muscle_id)
+            if muscle:
+                muscle.calib_min = calib_min
+                db.session.commit()
+
     socketio.emit('calibration_min_done', {'calib_min': calib_min})
 
 def finish_calibration_max():
-    global collecting_calib_max_power, calib_max
+    global collecting_calib_max_power, calib_max, selected_muscle_id
     with calib_max_lock:
         collecting_calib_max_power = False
         if calib_max_power_values:
@@ -185,6 +209,14 @@ def finish_calibration_max():
         else:
             calib_max = None
     print(f"[CALIB] Максимум мощности: {calib_max}")
+
+    with app.app_context():
+        if selected_muscle_id and calib_max is not None:
+            muscle = Muscle.query.get(selected_muscle_id)
+            if muscle:
+                muscle.calib_max = calib_max
+                db.session.commit()
+
     socketio.emit('calibration_max_done', {'calib_max': calib_max})
 
 def background_ble_loop():
@@ -200,5 +232,63 @@ async def run_ble_client():
         while True:
             await asyncio.sleep(1)
 
+# API endpoints for students and muscles
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/students', methods=['GET', 'POST'])
+def api_students():
+    if request.method == 'POST':
+        data = request.json
+        name = data.get('name')
+        if not name:
+            return jsonify({'error': 'Name required'}), 400
+        s = Student(name=name)
+        db.session.add(s)
+        db.session.commit()
+        return jsonify({'id': s.id, 'name': s.name})
+    else:
+        students = Student.query.all()
+        return jsonify([{'id': s.id, 'name': s.name} for s in students])
+
+@app.route('/api/students/<int:student_id>/muscles', methods=['GET', 'POST'])
+def api_muscles(student_id):
+    student = Student.query.get_or_404(student_id)
+    if request.method == 'POST':
+        data = request.json
+        name = data.get('name')
+        if not name:
+            return jsonify({'error': 'Name required'}), 400
+        m = Muscle(name=name, student=student)
+        db.session.add(m)
+        db.session.commit()
+        return jsonify({'id': m.id, 'name': m.name, 'calib_min': m.calib_min, 'calib_max': m.calib_max})
+    else:
+        muscles = Muscle.query.filter_by(student_id=student_id).all()
+        return jsonify([{'id': m.id, 'name': m.name, 'calib_min': m.calib_min, 'calib_max': m.calib_max} for m in muscles])
+
+@app.route('/api/muscles/<int:muscle_id>/select', methods=['POST'])
+def api_select_muscle(muscle_id):
+    global selected_muscle_id, calib_min, calib_max
+    muscle = Muscle.query.get_or_404(muscle_id)
+    selected_muscle_id = muscle_id
+    calib_min = muscle.calib_min
+    calib_max = muscle.calib_max
+    return jsonify({'success': True, 'calib_min': calib_min, 'calib_max': calib_max})
+
+@app.route('/api/select_student', methods=['POST'])
+def api_select_student():
+    global selected_student_id, selected_muscle_id, calib_min, calib_max
+    data = request.json
+    sid = data.get('student_id')
+    student = Student.query.get_or_404(sid)
+    selected_student_id = sid
+    selected_muscle_id = None
+    calib_min = None
+    calib_max = None
+    return jsonify({'success': True})
+
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5002, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5002)

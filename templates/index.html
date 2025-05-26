@@ -1,177 +1,397 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>EMG Visualization</title>
+  <meta charset="UTF-8" />
+  <title>EMG Trainer — Платформа тренера</title>
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
-      font-family: Arial, sans-serif;
-      max-width: 1200px;
-      margin: 0 auto;
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: #f4f7fa;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       padding: 20px;
     }
+    h1 {
+      margin-bottom: 1rem;
+      font-weight: 600;
+      color: #222;
+    }
+    .container {
+      background: #fff;
+      border-radius: 12px;
+      padding: 25px 30px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+      max-width: 1200px;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+    }
+    @media (max-width: 900px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .selection-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    label {
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: block;
+      color: #444;
+    }
+    select, input[type="text"] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.8px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.25s ease;
+    }
+    select:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 8px #6366f1aa;
+    }
+    .btn {
+      background-color: #6366f1;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: background-color 0.3s ease;
+      user-select: none;
+    }
+    .btn:hover {
+      background-color: #4f46e5;
+    }
+    .btn:disabled {
+      background-color: #a5b4fc;
+      cursor: not-allowed;
+    }
+
+    .indicator-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+    }
     .lamp {
-      width: 50px;
-      height: 50px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       background-color: #ccc;
-      margin: 20px auto;
-      box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
-      transition: background-color 0.3s;
+      box-shadow: inset 0 0 12px rgba(0,0,0,0.15);
+      transition: background-color 0.3s, box-shadow 0.3s;
     }
     .lamp.active {
-      background-color: #ff5555;
-      box-shadow: 0 0 20px #ff0000;
-    }
-    .plot-container {
-      margin-top: 20px;
+      background-color: #ef4444;
+      box-shadow: 0 0 20px #ef4444;
     }
     #power-indicator {
       width: 100%;
-      height: 30px;
-      border: 1px solid #ddd;
-      background-color: #f9f9f9;
-      position: relative;
-      margin: 15px 0;
-      border-radius: 4px;
+      height: 28px;
+      border-radius: 14px;
+      background: #eee;
       overflow: hidden;
+      box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+      position: relative;
+      max-width: 380px;
     }
     #power-bar {
       height: 100%;
       width: 0%;
-      background: linear-gradient(to right, #4CAF50, #FFC107, #F44336);
-      transition: width 0.3s;
+      background: linear-gradient(90deg, #4ade80 0%, #facc15 50%, #ef4444 100%);
+      transition: width 0.4s ease;
+      border-radius: 14px 0 0 14px;
     }
     #power-text {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-weight: bold;
-      color: #333;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #222;
+      user-select: none;
     }
-    #calibration-controls {
-      margin: 20px 0;
-      text-align: center;
+    .calibration-buttons {
+      display: flex;
+      gap: 20px;
     }
-    #calibration-controls button {
-      margin: 0 10px;
-      padding: 10px 20px;
-      font-size: 1rem;
-      cursor: pointer;
-    }
+
     #calib-message {
-      margin-top: 10px;
-      font-weight: bold;
-      min-height: 1.2em;
-      color: #333;
+      min-height: 1.3em;
+      font-weight: 600;
+      color: #444;
+      text-align: center;
+      margin-top: 12px;
+      font-size: 1rem;
+      user-select: none;
+    }
+
+    .plots {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 30px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .plot-container {
+      background: #fafafa;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+      flex: 1 1 48%;
+      min-width: 600px;
+      max-width: 1000px;
+      height: 650px;
+    }
+    @media (max-width: 900px) {
+      .plot-container {
+        flex: 1 1 100%;
+        min-width: auto;
+        max-width: 100%;
+        height: 550px;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>Real‐Time EMG Visualization</h1>
+  <h1>EMG Trainer — Платформа тренера</h1>
 
-  <!-- Lamp indicator -->
-  <div class="lamp" id="lamp"></div>
+  <div class="container">
+    <div class="selection-panel">
+      <label for="student-select">Выберите ученика</label>
+      <select id="student-select" aria-label="Выбор ученика"></select>
+      <input type="text" id="new-student-name" placeholder="Имя нового ученика" aria-label="Имя нового ученика" />
+      <button id="add-student-btn" class="btn">Добавить ученика</button>
 
-  <!-- Power bar -->
-  <h2>Signal Power</h2>
-  <div id="power-indicator">
-    <div id="power-bar"></div>
-    <span id="power-text">0%</span>
-  </div>
+      <label for="muscle-select">Выберите мышцу</label>
+      <select id="muscle-select" aria-label="Выбор мышцы"></select>
+      <input type="text" id="new-muscle-name" placeholder="Название новой мышцы" aria-label="Название новой мышцы" />
+      <button id="add-muscle-btn" class="btn" disabled>Добавить мышцу</button>
+    </div>
 
-  <!-- Calibration controls -->
-  <div id="calibration-controls">
-    <button id="calib-min-btn">Калибровать минимум</button>
-    <button id="calib-max-btn">Калибровать максимум</button>
-    <div id="calib-message"></div>
-  </div>
+    <div class="indicator-panel">
+      <div class="lamp" id="lamp" role="img" aria-label="Статус сигнала"></div>
 
-  <!-- EMG signal plot -->
-  <div class="plot-container">
-    <div id="emg-plot"></div>
-  </div>
+      <div id="power-indicator" aria-label="Полоса мощности сигнала">
+        <div id="power-bar"></div>
+        <span id="power-text">0%</span>
+      </div>
 
-  <!-- FFT spectrum plot -->
-  <div class="plot-container">
-    <h2>FFT Spectrum</h2>
-    <div id="fft-plot"></div>
+      <div class="calibration-buttons">
+        <button id="calib-min-btn" class="btn" disabled>Калибровать минимум</button>
+        <button id="calib-max-btn" class="btn" disabled>Калибровать максимум</button>
+      </div>
+      <div id="calib-message" aria-live="polite"></div>
+    </div>
+
+    <div class="plots">
+      <div class="plot-container">
+        <h2>EMG Сигнал</h2>
+        <div id="emg-plot"></div>
+      </div>
+      <div class="plot-container">
+        <h2>Спектр FFT</h2>
+        <div id="fft-plot"></div>
+      </div>
+    </div>
   </div>
 
   <script>
     const socket = io();
-    const maxPoints = 1000;
+    let selectedStudentId = null;
+    let selectedMuscleId = null;
 
-    Plotly.newPlot('emg-plot', [{
-      x: [], y: [], mode: 'lines', line: { }, name: 'EMG Signal'
-    }], {
-      title: 'EMG Signal',
-      xaxis: { title: 'Time (s)' },
-      yaxis: { title: 'Amplitude', range: [0, 4096] },
-      margin: { t: 40 }
-    });
-
-    Plotly.newPlot('fft-plot', [{
-      x: [], y: [], mode: 'lines', line: { }, name: 'FFT Spectrum'
-    }], {
-      title: 'Frequency Spectrum',
-      xaxis: { title: 'Frequency (Hz)', range: [0, 100] },
-      yaxis: { title: 'Amplitude' },
-      margin: { t: 40 }
-    });
-
+    const studentSelect = document.getElementById('student-select');
+    const muscleSelect = document.getElementById('muscle-select');
+    const addStudentBtn = document.getElementById('add-student-btn');
+    const addMuscleBtn = document.getElementById('add-muscle-btn');
+    const newStudentInput = document.getElementById('new-student-name');
+    const newMuscleInput = document.getElementById('new-muscle-name');
+    const calibMinBtn = document.getElementById('calib-min-btn');
+    const calibMaxBtn = document.getElementById('calib-max-btn');
+    const calibMessage = document.getElementById('calib-message');
     const lamp = document.getElementById('lamp');
     const powerBar = document.getElementById('power-bar');
     const powerText = document.getElementById('power-text');
-    const calibMessage = document.getElementById('calib-message');
+
+    let calibMin = null;
+    let calibMax = null;
+
+    async function loadStudents() {
+      const res = await fetch('/api/students');
+      const students = await res.json();
+      studentSelect.innerHTML = '<option value="">-- Выберите ученика --</option>';
+      students.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        studentSelect.appendChild(opt);
+      });
+      addMuscleBtn.disabled = true;
+      calibMinBtn.disabled = true;
+      calibMaxBtn.disabled = true;
+      muscleSelect.innerHTML = '<option value="">-- Сначала выберите ученика --</option>';
+      selectedStudentId = null;
+      selectedMuscleId = null;
+      calibMessage.textContent = '';
+    }
+
+    async function loadMuscles(studentId) {
+      if (!studentId) return;
+      const res = await fetch(`/api/students/${studentId}/muscles`);
+      const muscles = await res.json();
+      muscleSelect.innerHTML = '<option value="">-- Выберите мышцу --</option>';
+      muscles.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name;
+        muscleSelect.appendChild(opt);
+      });
+      addMuscleBtn.disabled = false;
+      calibMinBtn.disabled = true;
+      calibMaxBtn.disabled = true;
+      calibMessage.textContent = '';
+      selectedMuscleId = null;
+    }
+
+    studentSelect.addEventListener('change', async () => {
+      selectedStudentId = studentSelect.value;
+      if (!selectedStudentId) {
+        muscleSelect.innerHTML = '<option value="">-- Сначала выберите ученика --</option>';
+        addMuscleBtn.disabled = true;
+        calibMinBtn.disabled = true;
+        calibMaxBtn.disabled = true;
+        calibMessage.textContent = '';
+        return;
+      }
+      await fetch('/api/select_student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: selectedStudentId })
+      });
+      await loadMuscles(selectedStudentId);
+    });
+
+    muscleSelect.addEventListener('change', async () => {
+      selectedMuscleId = muscleSelect.value;
+      if (!selectedMuscleId) {
+        calibMinBtn.disabled = true;
+        calibMaxBtn.disabled = true;
+        calibMessage.textContent = '';
+        return;
+      }
+      const res = await fetch(`/api/muscles/${selectedMuscleId}/select`, { method: 'POST' });
+      const data = await res.json();
+      calibMin = data.calib_min;
+      calibMax = data.calib_max;
+      calibMinBtn.disabled = false;
+      calibMaxBtn.disabled = false;
+      if (calibMin != null && calibMax != null) {
+        calibMessage.textContent = `Загружены калибровки: мин=${calibMin.toFixed(2)}, макс=${calibMax.toFixed(2)}`;
+      } else {
+        calibMessage.textContent = 'Нет сохранённых калибровок для этой мышцы.';
+      }
+    });
+
+    addStudentBtn.addEventListener('click', async () => {
+      const name = newStudentInput.value.trim();
+      if (!name) return alert('Введите имя ученика');
+      await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      newStudentInput.value = '';
+      await loadStudents();
+    });
+
+    addMuscleBtn.addEventListener('click', async () => {
+      if (!selectedStudentId) return alert('Сначала выберите ученика');
+      const name = newMuscleInput.value.trim();
+      if (!name) return alert('Введите название мышцы');
+      await fetch(`/api/students/${selectedStudentId}/muscles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      newMuscleInput.value = '';
+      await loadMuscles(selectedStudentId);
+    });
+
+    calibMinBtn.addEventListener('click', () => {
+      if (!selectedMuscleId) return alert('Выберите мышцу для калибровки');
+      calibMessage.textContent = 'Расслабьтесь, собираем данные для минимума...';
+      socket.emit('start_calibration_min');
+    });
+
+    calibMaxBtn.addEventListener('click', () => {
+      if (!selectedMuscleId) return alert('Выберите мышцу для калибровки');
+      calibMessage.textContent = 'Максимально напрягитесь, собираем данные для максимума...';
+      socket.emit('start_calibration_max');
+    });
 
     socket.on('connect', () => {
       socket.emit('start_stream');
     });
 
     socket.on('update_plot', data => {
-      Plotly.extendTraces(
-        'emg-plot',
-        { x: [data.x], y: [data.y] },
-        [0],
-        maxPoints
-      );
+      Plotly.extendTraces('emg-plot', { x: [data.x], y: [data.y] }, [0], 1000);
       lamp.classList.toggle('active', data.lamp_status);
     });
 
     socket.on('update_fft', data => {
-      Plotly.update(
-        'fft-plot',
-        { x: [data.freq], y: [data.amp] },
-        {},
-        [0]
-      );
+      Plotly.update('fft-plot', { x: [data.freq], y: [data.amp] }, {}, [0]);
       const pct = data.percent_power ?? 0;
       powerBar.style.width = pct + '%';
       powerText.textContent = pct + '%';
     });
 
-    document.getElementById('calib-min-btn').onclick = () => {
-      calibMessage.textContent = 'Расслабьтесь, собираем данные для минимума...';
-      socket.emit('start_calibration_min');
-    };
-
-    document.getElementById('calib-max-btn').onclick = () => {
-      calibMessage.textContent = 'Максимально напрягитесь, собираем данные для максимума...';
-      socket.emit('start_calibration_max');
-    };
-
     socket.on('calibration_min_done', data => {
-      calibMessage.textContent = `Калибровка минимума завершена: ${data.calib_min.toFixed(2)}`;
+      calibMin = data.calib_min;
+      calibMessage.textContent = `Калибровка минимума завершена: ${calibMin.toFixed(2)}`;
     });
 
     socket.on('calibration_max_done', data => {
-      calibMessage.textContent = `Калибровка максимума завершена: ${data.calib_max.toFixed(2)}`;
+      calibMax = data.calib_max;
+      calibMessage.textContent = `Калибровка максимума завершена: ${calibMax.toFixed(2)}`;
     });
+
+    Plotly.newPlot('emg-plot', [{ x: [], y: [], mode: 'lines', name: 'EMG Signal' }], {
+      title: 'EMG Signal',
+      xaxis: { title: 'Time (s)' },
+      yaxis: { title: 'Amplitude', range: [0, 4096] },
+      responsive: true
+    });
+
+    Plotly.newPlot('fft-plot', [{ x: [], y: [], mode: 'lines', name: 'FFT Spectrum' }], {
+      title: 'Frequency Spectrum',
+      xaxis: { title: 'Frequency (Hz)', range: [0, 100] },
+      yaxis: { title: 'Amplitude' },
+      responsive: true
+    });
+
+    loadStudents();
   </script>
 </body>
 </html>
