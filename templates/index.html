@@ -53,6 +53,22 @@
       font-weight: bold;
       color: #333;
     }
+    #calibration-controls {
+      margin: 20px 0;
+      text-align: center;
+    }
+    #calibration-controls button {
+      margin: 0 10px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #calib-message {
+      margin-top: 10px;
+      font-weight: bold;
+      min-height: 1.2em;
+      color: #333;
+    }
   </style>
 </head>
 <body>
@@ -66,6 +82,13 @@
   <div id="power-indicator">
     <div id="power-bar"></div>
     <span id="power-text">0%</span>
+  </div>
+
+  <!-- Calibration controls -->
+  <div id="calibration-controls">
+    <button id="calib-min-btn">Калибровать минимум</button>
+    <button id="calib-max-btn">Калибровать максимум</button>
+    <div id="calib-message"></div>
   </div>
 
   <!-- EMG signal plot -->
@@ -83,7 +106,6 @@
     const socket = io();
     const maxPoints = 1000;
 
-    // Initialize EMG signal plot
     Plotly.newPlot('emg-plot', [{
       x: [], y: [], mode: 'lines', line: { }, name: 'EMG Signal'
     }], {
@@ -93,7 +115,6 @@
       margin: { t: 40 }
     });
 
-    // Initialize FFT spectrum plot
     Plotly.newPlot('fft-plot', [{
       x: [], y: [], mode: 'lines', line: { }, name: 'FFT Spectrum'
     }], {
@@ -106,12 +127,12 @@
     const lamp = document.getElementById('lamp');
     const powerBar = document.getElementById('power-bar');
     const powerText = document.getElementById('power-text');
+    const calibMessage = document.getElementById('calib-message');
 
     socket.on('connect', () => {
       socket.emit('start_stream');
     });
 
-    // Update EMG trace and lamp status
     socket.on('update_plot', data => {
       Plotly.extendTraces(
         'emg-plot',
@@ -122,7 +143,6 @@
       lamp.classList.toggle('active', data.lamp_status);
     });
 
-    // Update FFT spectrum and power bar
     socket.on('update_fft', data => {
       Plotly.update(
         'fft-plot',
@@ -133,6 +153,24 @@
       const pct = data.percent_power ?? 0;
       powerBar.style.width = pct + '%';
       powerText.textContent = pct + '%';
+    });
+
+    document.getElementById('calib-min-btn').onclick = () => {
+      calibMessage.textContent = 'Расслабьтесь, собираем данные для минимума...';
+      socket.emit('start_calibration_min');
+    };
+
+    document.getElementById('calib-max-btn').onclick = () => {
+      calibMessage.textContent = 'Максимально напрягитесь, собираем данные для максимума...';
+      socket.emit('start_calibration_max');
+    };
+
+    socket.on('calibration_min_done', data => {
+      calibMessage.textContent = `Калибровка минимума завершена: ${data.calib_min.toFixed(2)}`;
+    });
+
+    socket.on('calibration_max_done', data => {
+      calibMessage.textContent = `Калибровка максимума завершена: ${data.calib_max.toFixed(2)}`;
     });
   </script>
 </body>
